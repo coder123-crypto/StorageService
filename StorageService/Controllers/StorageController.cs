@@ -39,7 +39,7 @@ public class StorageController(IConfiguration configuration) : ControllerBase
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok();
+            return Ok(newItem.Id);
         }
         catch (Exception e)
         {
