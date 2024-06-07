@@ -1,5 +1,4 @@
-﻿using System.Text;
-using System.Text.Json;
+﻿using System.Text.Json;
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using StorageService.Data;
@@ -11,23 +10,24 @@ namespace StorageService.Controllers;
 public class StorageController(IConfiguration configuration) : ControllerBase
 {
     [HttpPost("Add")]
-    public async Task<ActionResult> Add(IFormFile file, string metaData)
+    public async Task<ActionResult> Add(IFormFile file)
     {
         try
         {
-            var meta = await JsonSerializer.DeserializeAsync<UploadedFileData>(new MemoryStream(Encoding.UTF8.GetBytes(metaData)));
-
-            var config = new MapperConfiguration(cfg => cfg.CreateMap<UploadedFileData, StorageItem>());
-            var newItem = config.CreateMapper().Map<StorageItem>(meta!);
-            newItem.Id = Guid.NewGuid();
-            newItem.Name = file.FileName;
-            newItem.Extension = Path.GetExtension(file.FileName);
-            newItem.OriginalSource = HttpContext.Connection.RemoteIpAddress!.ToString();
-            newItem.UploadedDate = DateTime.Now;
+            var form = HttpContext.Request.Form;
+            var newItem = new StorageItem
+            {
+                Id = Guid.NewGuid(),
+                UploadedDate = DateTime.Now,
+                OriginalSource = HttpContext.Connection.RemoteIpAddress!.ToString(),
+                ModifiedDate = JsonSerializer.Deserialize<DateTime>(form["ModifiedDate"]!),
+                OriginalPath = file.FileName,
+                Name = Path.GetFileName(file.FileName),
+                Extension = Path.GetExtension(file.FileName)
+            };
 
             string path = GetPath(newItem.Id);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-
             await using var output = System.IO.File.Open(path, FileMode.Create);
             await file.CopyToAsync(output);
 
