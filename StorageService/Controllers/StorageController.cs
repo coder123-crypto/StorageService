@@ -10,7 +10,7 @@ namespace StorageService.Controllers;
 public class StorageController(IConfiguration configuration) : ControllerBase
 {
     [HttpPost("Add")]
-    public async Task<ActionResult> Add(IFormFile file)
+    public async Task<IActionResult> Add(IFormFile file)
     {
         try
         {
@@ -29,11 +29,15 @@ public class StorageController(IConfiguration configuration) : ControllerBase
             string path = GetPath(newItem.Id);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await using var output = System.IO.File.Open(path, FileMode.Create);
-            await file.CopyToAsync(output);
 
             await using var context = new StorageContext();
+            await using var transaction = await context.Database.BeginTransactionAsync();
+
+            await file.CopyToAsync(output);
             context.Items.Add(newItem);
+
             await context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return Ok();
         }
@@ -43,8 +47,8 @@ public class StorageController(IConfiguration configuration) : ControllerBase
         }
     }
 
-    [HttpGet("Get")]
-    public async Task<ActionResult> Get(Guid id)
+    [HttpGet("GetInfo")]
+    public async Task<IActionResult> GetInfo(Guid id)
     {
         try
         {
@@ -65,19 +69,51 @@ public class StorageController(IConfiguration configuration) : ControllerBase
         }
     }
 
-    [HttpGet("Exists")]
-    public ActionResult Exists(Guid id)
-    {
-        return Ok(System.IO.File.Exists(GetPath(id)));
-    }
-
-    [HttpDelete("Delete")]
-    public ActionResult Delete(Guid id)
+    [HttpGet("GetFile")]
+    public async Task<IActionResult> GetFile(Guid id)
     {
         try
         {
-            System.IO.File.Delete(GetPath(id));
+            await using var context = new StorageContext();
+            var item = await context.Items.FindAsync(id);
 
+            string path = GetPath(id);
+            if (System.IO.File.Exists(path))
+            {
+                return File(System.IO.File.OpenRead(path), "application/octet-stream", item!.Name);
+            }
+
+            return NotFound();
+        }
+        catch (Exception e)
+        {
+            return BadRequest(e.InnerException?.Message ?? e.Message);
+        }
+    }
+
+    [HttpGet("Exists")]
+    public async Task<IActionResult> Exists(Guid id)
+    {
+        await using var context = new StorageContext();
+        return Ok(await context.Items.FindAsync(id));
+    }
+
+    [HttpDelete("Delete")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        try
+        {
+            await using var context = new StorageContext();
+            await using var transaction = await context.Database.BeginTransactionAsync();
+
+            var item = await context.Items.FindAsync(id);
+
+            context.Items.Remove(item!);
+            System.IO.File.Delete(GetPath(id));
+            
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            
             return Ok();
         }
         catch (Exception e)
