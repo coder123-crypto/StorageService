@@ -58,7 +58,9 @@ public class StorageController(IConfiguration configuration) : ControllerBase
             if (item != null)
             {
                 var config = new MapperConfiguration(cfg => cfg.CreateMap<StorageItem, DownloadedFileData>());
-                return Ok(config.CreateMapper().Map<DownloadedFileData>(item));
+                var downloadedItem = config.CreateMapper().Map<DownloadedFileData>(item);
+                downloadedItem.Length = new FileInfo(GetPath(id)).Length;
+                return Ok(downloadedItem);
             }
 
             return NotFound();
